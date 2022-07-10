@@ -1,0 +1,460 @@
+<html>
+    <head>
+        <title>Plouffe Basic ui</title>
+        <script src="nui://game/ui/jquery.js" type="text/javascript"></script>
+        <link href="style.css" rel="stylesheet" type="text/css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <link rel="preconnect" href="https://fonts.gstatic.com" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    </head>
+
+    <body>
+        <div class="container">
+
+            <div id="options-container" class="options-container">
+                <div onmouseleave="HideToolTip()" onmouseover="Tooltip('Mute')" onclick="MuteNotification()" id="options-container-refresh" class="fa fa-deaf fa-2x" aria-hidden="true"> </div>
+                <div onmouseleave="HideToolTip()" onmouseover="Tooltip('Rafraichir')" onclick="RefreshOfficiers()" id="options-container-refresh" class="fa fa-history fa-2x" aria-hidden="true"> </div>
+                <div onmouseleave="HideToolTip()" onmouseover="Tooltip('Fermer')" onclick="CloseAll()" id="options-container-refresh" class="fa fa-power-off fa-2x" aria-hidden="true"> </div>
+                <div onmouseleave="HideToolTip()" onmouseover="Tooltip('Clear')" onclick="ClearAllNotifications()" id="options-container-clear" class="fa fa-recycle fa-2x" class="tooltip" aria-hidden="true"> </div>
+            </div>
+
+            <div id="temp-service-container" class="temp-service-container"> </div>
+            <div id="service-container" class="service-container"> </div>
+            <div id="temp-notif-container" class="temp-notif-container"> </div>
+            <div id="notif-container" class="notif-container"> </div>
+
+            <div id="select-box" class="select-box ">
+                <div onclick="ShowOfficiers()" class="select-box-policier">
+                    <div class="select-box-policier-txt" >Policiers</div>
+                </div>
+
+                <div onclick="ShowEms()" class="select-box-ems">
+                    <div class="select-box-ems-txt" >Ems</div>
+                </div>
+            </div>
+
+            <div id="officiers-container" class="officiers-container"> </div>
+            <div id="ems-container" class="ems-container"> </div>
+
+            <div id="notif-menu" class="notif-menu">
+                <div class="button" onclick="RespondNotification()">
+                    <div class="header">Répondre</div>
+                    <div class="txt">Répondre au dispatch</div>
+                </div>
+                <div class="button" onclick="SetGpsRoute()">
+                    <div class="header">Gps</div>
+                    <div class="txt">Place votre point gps</div>
+                </div>
+                <div class="button" onclick="RemoveNotification()">
+                    <div class="header">Effacer</div>
+                    <div class="txt">Retire la notification</div>
+                </div>
+                <div class="button" onclick="CancelNotificationClick()">
+                    <div class="header">Anuler</div>
+                    <div class="txt">Ferme le menu</div>
+                </div>
+            </div>
+            
+            <div id="tooltip" class="tooltip"></div>
+        </div>
+
+        <script>
+            $(".temp-service-container").show();
+            $(".temp-notif-container").show();
+            $(".officiers-container").hide();
+            $(".notif-container").hide();
+            $(".notif-menu").hide();
+            $(".options-container").hide();
+            $(".select-box").hide();
+            $(".ems-container").hide();
+            $(".service-container").hide();
+
+            const resourcename = GetParentResourceName();
+            var x = 0;
+            var y = 0;
+            var notifications = [];
+            var last_clicked = 0;
+
+            document.onkeyup = function (data) {
+                if (data.which == 27 || data.which == 113) {
+                    Close()
+                    $.post('http://'+resourcename+'/close');
+                }
+            };
+                
+            document.addEventListener('mousemove', OnMouseUpdate, false);
+            document.addEventListener('mouseenter', OnMouseUpdate, false);
+
+            window.addEventListener('message', function(event) {
+                var action = event.data;
+
+                if (action.show) { 
+                    Open(action);
+                } else if (action.show == false) {
+                    Close();
+                }
+
+                if (action.remove) {
+                    notifications[action.id].remove();
+                };
+
+                if (action.notification) {
+                    AddNotification(action.notification);
+                };
+
+                if (action.officiers) {
+                    AddOfficier(action.officiers);
+                };
+
+                if (action.ems) {
+                    AddEms(action.ems);
+                };
+
+                if (action.removeOfficier) {
+                    RemoveOfficer(action.removeOfficier);
+                };
+                
+                if (action.radio) {
+                    UpdateOfficierRadio(action.radio);
+                };
+
+                if (action.service) {
+                    PlayerServiceUpdate(action.service)
+                };
+            });
+
+            function Open(action) {
+                if (action.complet) {
+                    var element = document.getElementById("notif-container");
+                    element.style.height = "73.3vh";
+                    $(".ems-container").hide();
+                    $(".officiers-container").fadeIn();
+                    $(".options-container").fadeIn();
+                    $(".select-box").fadeIn();
+                    $(".service-container").fadeIn();
+                } else {
+                    let valid = false;
+                    
+                    for (let i = 0; i < notifications.length; i++) {
+                        if (notifications[i] != null) {
+                            valid = true;
+                            break;
+                        };
+                    };
+                    
+                    if (valid == true) {
+                        $(".officiers-container").hide();
+                        var element = document.getElementById("notif-container");
+                        element.style.height = "98vh";
+                    } else {
+                        $.post('http://'+resourcename+'/close');
+                    };
+                };
+
+                $(".temp-service-container").hide();
+                $(".temp-notif-container").hide();
+                $(".notif-container").fadeIn();
+            };
+
+            function Close() {
+                $(".temp-service-container").show();
+                $(".temp-notif-container").show();
+                $(".officiers-container").hide();
+                $(".notif-container").hide();
+                $(".notif-menu").hide();
+                $(".options-container").hide();
+                $(".select-box").hide();
+                $(".ems-container").hide();
+                $(".service-container").hide();
+            }
+
+            function CloseAll() {
+                $.post('http://'+resourcename+'/close');
+                $(".temp-service-container").show();
+                $(".temp-notif-container").show();
+                $(".officiers-container").hide();
+                $(".notif-container").hide();
+                $(".notif-menu").hide();
+                $(".options-container").hide();
+                $(".select-box").hide();
+                $(".ems-container").hide();
+                $(".service-container").hide();
+                var element = document.getElementById("tooltip");
+                element.style.opacity = 0;
+            };
+
+            function HideToolTip() {
+                var element = document.getElementById("tooltip");
+                element.style.opacity = 0;
+            };
+
+            function Tooltip(val){
+                var element = document.getElementById("tooltip");
+                element.style.opacity = 1;
+                element.innerHTML = val;
+            };
+
+            function OnMouseUpdate(e) {
+                var element = document.getElementById("tooltip");
+                
+                x = e.pageX;
+                y = e.pageY;
+
+                element.style.top = `${y+10}px`;
+                element.style.left = `${x}px`;
+            };
+
+            function UpdateOfficierRadio(officier) {
+                let element = document.getElementById('radio_'+officier.id);
+
+                if (element) {
+                    element.innerHTML = "</b>Radio: <b>"+ officier.radio;
+                };
+            };
+
+            function RemoveOfficer(officier) {
+                let id 
+
+                if (typeof(officier) == "table") {
+                    id = officier.id;
+                } else {
+                    id = officier;
+                };
+
+                let element = document.getElementById(id);
+
+                if (element) {
+                    element.remove();
+                };
+            };
+
+            function AddOfficier(officiers) {
+                for (let i = 0; i < officiers.length; i++) {
+                    let element
+
+                    element = $(`<div class="officier" id=`+officiers[i].id+`>
+                        <div id=`+'nom_'+officiers[i].id+` class="nom" > </b>Nom: <b> `+ officiers[i].name + ` </div>
+                        <div id=`+'matricule_'+officiers[i].id+` class="matricule" > </b>Matricule: <b> `+ officiers[i].badge + ` </div>   
+                        <div id=`+'departement_'+officiers[i].id+` class="departement" > </b>Département: <b> `+ officiers[i].departement + ` </div>   
+                        <div id=`+'radio_'+officiers[i].id+` class="radio" > </b>Radio: <b> `+ officiers[i].radio + ` </div>
+                    </div>`);
+                    $('.officiers-container').append(element);
+                };
+            };
+
+            function AddEms(officiers) {
+                for (let i = 0; i < officiers.length; i++) {
+                    let element
+
+                    element = $(`<div class="ems" id=`+officiers[i].id+`>
+                        <div id=`+'nom_'+officiers[i].id+` class="nom" > </b>Nom: <b> `+ officiers[i].name + ` </div>
+                        <div id=`+'matricule_'+officiers[i].id+` class="matricule" > </b>Matricule: <b> `+ officiers[i].badge + ` </div>   
+                        <div id=`+'departement_'+officiers[i].id+` class="departement" > </b>Département: <b> `+ officiers[i].departement + ` </div>   
+                        <div id=`+'radio_'+officiers[i].id+` class="radio" > </b>Radio: <b> `+ officiers[i].radio + ` </div>
+                    </div>`);
+                    $('.ems-container').append(element);
+                };
+            };
+
+            function GetTime(){
+                var d = new Date();
+                var hour = d.getHours();
+                var minutes = d.getMinutes();
+
+                minutes = minutes.toString();
+
+                if (minutes.length < 2) {
+                    minutes = minutes + "0";
+                };
+
+                return hour + ":" + minutes;
+            };
+
+            function Content(notification) {
+                var d = new Date();
+                var hour = d.getHours()
+                var minutes = d.getMinutes()
+
+                minutes = minutes.toString()
+
+                if (minutes.length < 2) {
+                    minutes = "0" + minutes 
+                }
+
+                var $content = '<div id="'+"service_"+ notification.id+'" class="notification-content">';
+                    $content += ('<div id="notification-service-id">' + notification.badge + '</div>');
+                    $content += ('<div id="notification-service-time">'+ GetTime() +'</div>');
+                    $content += ('<div id="notification-service-name"> '+ notification.action +' </div>');
+                    $content += ('<div id="notification-service"> </b>'+ notification.name +' <b> </div>');
+                    $content += '</div>';
+                return $content
+            }
+
+            function PlayerServiceUpdate(notification) {
+                var $notif = $(document.createElement('div'));
+                var tempNotif = $notif 
+                var style = notification.style || 'inservice';
+
+                $notif.addClass('notification-service').addClass(style);
+
+                $notif.html(Content(notification));
+                $notif.fadeIn();
+                
+                $('.temp-service-container').prepend(tempNotif);
+
+                setTimeout(function() {
+                    tempNotif.remove()
+                    $('.service-container').prepend($notif);
+                }, 1500)
+            };
+            
+            function CreateNotificationContent(notification) {
+                let d = new Date();
+                let hour = d.getHours()
+                let minutes = d.getMinutes()
+
+                var $content = '<div id="'+"notification_"+ notification.id+'" onclick="NotificationClick('+ notification.id + ')" class="notification-content">';
+                
+                $content += ('<div id="notification-id">' + notification.id + '</div>');
+
+                if (notification.code) {
+                    $content += ('<div id="notification-code">' + notification.code + '</div>');
+                };
+
+                $content += ('<div id="notification-time">'+ GetTime() +'</div>');
+
+                if (notification.name) {
+                    $content += ('<div id="notification-name">' + notification.name + '</div>');
+                };
+
+                // if (notification.fa) {
+                //     $content += ('<div id="notification-marker"><i class="fa ' + notification.fa +' aria-hidden="true"></i></div>');
+                // };
+
+                if (notification.location) {
+                    $content += ('<div id="notification-info"><i class="fa fa-compass"></i>&nbsp;&nbsp;' + notification.location + '</div>');
+                };
+
+                if (notification.weapon) {
+                    $content += ('<div id="notification-weapon-info"><i class="fa fa-list-alt"></i>&nbsp;&nbsp;Arme: ' + notification.weapon + '</div>');
+                };
+        
+                if (notification.model && notification.plate) {
+                    $content += ('<div id="notification-vehicle-info"><i class="fa fa-car"></i>&nbsp;&nbsp;Modèle: ' + notification.model + '&nbsp;&nbsp&nbsp<i class="fa fa-cc"></i>&nbsp&nbsp' + notification.plate + '</div>');
+                } else if (notification.model) {
+                    $content += ('<div id="notification-vehicle-info"><i class="fa fa-car"></i>&nbsp;&nbsp;Modèle: ' + notification.model + '</div>');
+                } else if (notification.plate) {
+                    $content += ('<div id="notification-vehicle-info"><i class="fa fa-cc"></i>&nbsp;&nbsp;Plaque: ' + notification.plate + '</div>');
+                };
+
+                if (notification.color) {
+                    if (notification.color2) {
+                        $content += '<div id="notification-vehicle-info"><i class="fa fa-paint-brush"></i>&nbsp;&nbsp;Couleur: ' + notification.color + ' / ' + notification.color2 + '</div>';  
+                    } else {
+                        $content += '<div id="notification-vehicle-info"><i class="fa fa-paint-brush"></i>&nbsp;&nbsp;Couleur: ' + notification.color + '</div>';
+                    };
+                };
+
+                if (notification.altitude) {
+                    $content += '<div id="notification-vehicle-info"><i class="fa fa-arrow-up"></i>&nbsp;&nbsp;Altitude rapportée: ' + notification.altitude + ' pieds</div>';
+                }
+
+                $content += '</div>';
+
+                return $content
+            };
+
+            function AddNotification(notification) {
+                var $notif = $(document.createElement('div'));
+                var style = notification.style || 'default';
+                var tempNotif = $notif
+
+                $notif.addClass('notification').addClass(style);
+                $notif.html(CreateNotificationContent(notification));
+                $notif.fadeIn();
+
+                notifications[notification.id] = $notif;
+
+                $('.temp-notif-container').prepend(tempNotif);
+
+                setTimeout(function() {
+                    tempNotif.remove()
+                    $('.notif-container').prepend($notif);
+                }, 1500)
+            };
+
+            function SetGpsRoute() {
+                $.post('http://'+resourcename+'/setgpsroute', JSON.stringify({
+				    id : last_clicked
+			    }));
+
+                $(".notif-menu").hide();
+                last_clicked = 0;
+            };
+
+            function RespondNotification() {
+                $.post('http://'+resourcename+'/respond', JSON.stringify({
+				    id : last_clicked
+			    }));
+
+                $(".notif-menu").hide();
+                last_clicked = 0;
+            };
+
+            function CancelNotificationClick() {
+                $(".notif-menu").hide();
+                last_clicked = 0;
+            };
+
+            function RemoveNotification() {
+                $(".notif-menu").hide();
+                $.post('http://'+resourcename+'/removeNotification', JSON.stringify({
+				    id : last_clicked
+			    }));
+                notifications[last_clicked].remove();
+                last_clicked = 0;
+            };
+            
+            function NotificationClick(id) {
+                if (last_clicked == id) {
+                    $(".notif-menu").hide();
+                    last_clicked = 0
+                } else {
+                    var element = document.getElementById("notif-menu");
+                    element.style.top = `${y}px`;
+                    $(".notif-menu").fadeIn(200);
+                    last_clicked = id
+                }
+            };
+            
+            function ClearAllNotifications(){
+                for (let i = 1; i < notifications.length; i++) {
+                    if (notifications[i]) {
+                        notifications[i].remove();
+                        notifications[i] = null;
+                    };
+                };
+
+                $.post('http://'+resourcename+'/removeNotification');
+            };
+
+            function RefreshOfficiers() {
+                $.post('http://'+resourcename+'/refreshofficiers');
+            };
+
+            function MuteNotification() {
+                $.post('http://'+resourcename+'/switchsound');
+            };
+
+            function ShowOfficiers() {
+                $(".ems-container").hide();
+                $(".officiers-container").fadeIn(500);
+            };
+            
+            function ShowEms() {
+                $(".officiers-container").hide();
+                $(".ems-container").fadeIn(500);
+            }
+        </script>
+    </body>
+</html>
